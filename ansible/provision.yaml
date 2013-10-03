@@ -1,0 +1,23 @@
+---
+- hosts: all
+  vars:
+    graphite_packages:
+      - graphite-web
+      - carbon
+    git_url: "https://github.com/graphite-project"
+    version: "0.9.12"
+
+    server_packages:
+      - gunicorn
+      - python-memcached
+
+  tasks:
+    - name: system requirements
+      apt: pkg=${item} state=latest
+      sudo: yes
+      with_items: ["python-cairo", "memcached"]
+
+    - name: install graphite
+      pip: name=${item} version=${version} extra_args="--install-option=--prefix=/home/vagrant/${item}"
+      sudo: yes
+      with_items: ${graphite_packages}
