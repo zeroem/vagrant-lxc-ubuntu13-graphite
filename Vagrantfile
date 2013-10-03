@@ -9,6 +9,10 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # options are documented and commented below. For a complete reference,
   # please see the online documentation at vagrantup.com.
 
+  Vagrant.require_plugin "vagrant-hostmanager"
+  config.hostmanager.enabled = true
+  config.hostmanager.manage_host = true
+
   # Every Vagrant virtual environment requires a box to build off of.
   config.vm.box = "ubuntu13-ansible"
 
@@ -40,7 +44,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # argument is a set of non-required options.
   # config.vm.synced_folder "../data", "/vagrant_data"
 
-  config.vm.provision "ansible" do |ansible|
+  config.vm.provision :ansible do |ansible|
+    ansible.verbose = "v"
     ansible.playbook = "ansible/provision.yaml"
+    ansible.host_key_checking = false
   end
 end
