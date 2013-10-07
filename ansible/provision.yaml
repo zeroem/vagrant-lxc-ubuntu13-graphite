@@ -1,23 +1,42 @@
 ---
 - hosts: all
   vars:
-    graphite_packages:
-      - graphite-web
-      - carbon
-    git_url: "https://github.com/graphite-project"
-    version: "0.9.12"
+    home: /home/vagrant
+    virtualenv_home: ${home}/.virtualenv
+    graphite:
+      packages:
+        - graphite-web
+        - carbon
+      version: "0.9.12"
 
-    server_packages:
+    pip_packages:
+      - supervisor
+
+    system_packages:
+      - libcairo2-dev
       - gunicorn
-      - python-memcached
+      - python-cairo
+      - memcached
+
 
   tasks:
     - name: system requirements
       apt: pkg=${item} state=latest
       sudo: yes
-      with_items: ["python-cairo", "memcached"]
+      with_items: ${system_packages}
 
-    - name: install graphite
-      pip: name=${item} version=${version} extra_args="--install-option=--prefix=/home/vagrant/${item}"
-      sudo: yes
-      with_items: ${graphite_packages}
+    - name: install graphite packages
+      git: repo=https://github.com/graphite-project/${item} version=${graphite.version} dest=${home}/${item} depth=1
+      with_items: ${graphite.packages}
+
+    - name: workaround for network blocking git://
+      command: sed -i -e "s/git+git/git+https/" ${home}/${item}/requirements.txt
+      with_items: ${graphite.packages}
+
+    - name: install graphite deps
+      pip: requirements=${home}/${item}/requirements.txt state=latest virtualenv=${virtualenv_home}/HACK
+      with_items: ${graphite.packages}
+
+    - name: install pip packages
+      pip: name=${item} state=latest virtualenv=${virtualenv_home}/HACK
+      with_items: ${pip_packages}
