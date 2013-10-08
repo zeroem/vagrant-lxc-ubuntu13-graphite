@@ -25,6 +25,25 @@
       sudo: yes
       with_items: ${system_packages}
 
+    - name: pip install packages
+      pip: name=${item} virtualenv=${virtualenv_home}/${item}
+      with_items: ${pip_packages}
+
+    - name: supervisor config
+      copy: src=supervisor/supervisord.conf dest=${home}
+
+    - name: supervisor.d dir
+      file: dest=${home}/supervisor.d state=directory
+
+    - name: is supervisor running?
+      command: test -f ${home}/supervisord.pid
+      ignore_errors: True
+      register: supervisor_check
+
+    - name: "start supervisor if it isn't already running"
+      command: chdir=${home} .virtualenv/supervisor/bin/supervisord
+      when: supervisor_check.rc != 0
+
     - name: install graphite packages
       git: repo=https://github.com/graphite-project/${item} version=${graphite.version} dest=${home}/${item} depth=1
       with_items: ${graphite.packages}
@@ -34,9 +53,13 @@
       with_items: ${graphite.packages}
 
     - name: install graphite deps
-      pip: requirements=${home}/${item}/requirements.txt state=latest virtualenv=${virtualenv_home}/HACK
+      pip: requirements=${home}/${item}/requirements.txt state=latest virtualenv=${virtualenv_home}/graphite
       with_items: ${graphite.packages}
 
-    - name: install pip packages
-      pip: name=${item} state=latest virtualenv=${virtualenv_home}/HACK
-      with_items: ${pip_packages}
+    - name: copy graphite conf
+      copy: src=graphite/graphite.conf dest=${home}/supervisor.d/
+
+    - name: start up graphite in supervisor
+      command: chdir=${home} .virtualenv/supervisor/bin/supervisorctl reread graphite:*
+
+    - command: chdir=${home} .virtualenv/supervisor/bin/supervisorctl restart graphite:*
