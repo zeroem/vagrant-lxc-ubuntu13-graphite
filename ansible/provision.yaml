@@ -1,3 +1,4 @@
+# Supervisord running really should be a prerequisite for this, not encoded into it
 ---
 - hosts: all
   vars:
@@ -7,7 +8,10 @@
       packages:
         - graphite-web
         - carbon
-      version: "0.9.12"
+      version: "master"
+      carbon_conf_files:
+        - carbon.conf
+        - storage-schemas.conf
 
     pip_packages:
       - supervisor
@@ -16,6 +20,7 @@
       - libcairo2-dev
       - gunicorn
       - python-cairo
+      - python-rrdtool
       - memcached
 
 
@@ -53,13 +58,20 @@
       with_items: ${graphite.packages}
 
     - name: install graphite deps
-      pip: requirements=${home}/${item}/requirements.txt state=latest virtualenv=${virtualenv_home}/graphite
+      pip: requirements=${home}/${item}/requirements.txt virtualenv=${virtualenv_home}/graphite
       with_items: ${graphite.packages}
 
-    - name: copy graphite conf
+    - name: setup graphite apps
+      command: chdir=/home/vagrant/${item} python setup.py build install
+      sudo: yes
+      with_items: ${graphite.packages}
+
+    - name: copy example confs to main conf
+      command: chdir=${home}/carbon/conf creates=${home}/carbon/conf/${item} cp ${item}.example ${item}
+      with_items: ${graphite.carbon_conf_files}
+
+    - name: copy graphite supervisor conf
       copy: src=graphite/graphite.conf dest=${home}/supervisor.d/
 
     - name: start up graphite in supervisor
-      command: chdir=${home} .virtualenv/supervisor/bin/supervisorctl reread graphite:*
-
-    - command: chdir=${home} .virtualenv/supervisor/bin/supervisorctl restart graphite:*
+      command: chdir=${home} .virtualenv/supervisor/bin/supervisorctl reload
