@@ -3,7 +3,7 @@
 - hosts: all
   vars:
     home: /home/vagrant
-    virtualenv_home: ${home}/.virtualenv
+    virtualenv_home: "{{ home }}/.virtualenv"
     graphite:
       packages:
         - graphite-web
@@ -13,9 +13,6 @@
         - carbon.conf
         - storage-schemas.conf
 
-    pip_packages:
-      - supervisor
-
     system_packages:
       - libcairo2-dev
       - gunicorn
@@ -23,55 +20,52 @@
       - python-rrdtool
       - memcached
 
-
-  tasks:
+  pre_tasks:
     - name: system requirements
-      apt: pkg=${item} state=latest
+      apt: pkg={{ item }} state=latest
       sudo: yes
-      with_items: ${system_packages}
-
-    - name: pip install packages
-      pip: name=${item} virtualenv=${virtualenv_home}/${item}
-      with_items: ${pip_packages}
-
-    - name: supervisor config
-      copy: src=supervisor/supervisord.conf dest=${home}
-
-    - name: supervisor.d dir
-      file: dest=${home}/supervisor.d state=directory
-
-    - name: is supervisor running?
-      command: test -f ${home}/supervisord.pid
-      ignore_errors: True
-      register: supervisor_check
-
-    - name: "start supervisor if it isn't already running"
-      command: chdir=${home} .virtualenv/supervisor/bin/supervisord
-      when: supervisor_check.rc != 0
+      with_items: system_packages
 
     - name: install graphite packages
-      git: repo=https://github.com/graphite-project/${item} version=${graphite.version} dest=${home}/${item} depth=1
-      with_items: ${graphite.packages}
+      git: repo=https://github.com/graphite-project/{{ item }}
+           version={{ graphite.version }}
+           dest={{ home }}/{{ item }}
+           depth=1
+
+      with_items: graphite.packages
 
     - name: workaround for network blocking git://
-      command: sed -i -e "s/git+git/git+https/" ${home}/${item}/requirements.txt
-      with_items: ${graphite.packages}
+      command: sed -i -e "s/git+git/git+https/" {{ home }}/{{ item }}/requirements.txt
+      with_items: graphite.packages
 
     - name: install graphite deps
-      pip: requirements=${home}/${item}/requirements.txt virtualenv=${virtualenv_home}/graphite
-      with_items: ${graphite.packages}
+      pip: requirements={{ home }}/{{ item }}/requirements.txt
+           virtualenv={{ virtualenv_home }}/graphite
+      with_items: graphite.packages
 
     - name: setup graphite apps
-      command: chdir=/home/vagrant/${item} python setup.py build install
+      command: chdir=/home/vagrant/{{ item }}
+               python setup.py build install
       sudo: yes
-      with_items: ${graphite.packages}
+      with_items: graphite.packages
 
     - name: copy example confs to main conf
-      command: chdir=${home}/carbon/conf creates=${home}/carbon/conf/${item} cp ${item}.example ${item}
-      with_items: ${graphite.carbon_conf_files}
+      command: chdir={{ home }}/carbon/conf
+               creates={{ home }}/carbon/conf/{{ item }} 
+               cp {{ item }}.example {{ item }}
+      with_items: graphite.carbon_conf_files
 
-    - name: copy graphite supervisor conf
-      copy: src=graphite/graphite.conf dest=${home}/supervisor.d/
+  roles:
+    - role: "supervise"
+      name: carbon-cache
+      command: carbon-cache.py --nodaemon
+      chdir: "/home/vagrant/carbon/bin"
+      app_env:
+        PATH: "/home/vagrant/.virtualenv/graphite/bin"
 
-    - name: start up graphite in supervisor
-      command: chdir=${home} .virtualenv/supervisor/bin/supervisorctl reload
+    - role: "supervise"
+      name: graphite-web
+      command: gunicorn django webapp/graphite
+      app_home: "/home/vagrant/graphite-web"
+      app_env:
+        PATH: "/home/vagrant/.virtualenv/graphite/bin"
