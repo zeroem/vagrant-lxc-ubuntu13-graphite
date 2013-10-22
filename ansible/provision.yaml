@@ -3,7 +3,7 @@
 - hosts: all
   vars:
     home: /home/vagrant
-    virtualenv_home: "{{ home }}/.virtualenv"
+    virtualenv_home: "{{ home }}/.virtualenvs"
     graphite:
       packages:
         - graphite-web
