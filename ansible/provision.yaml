@@ -15,6 +15,10 @@
         - carbon.conf
         - storage-schemas.conf
 
+      web:
+        ip: 0.0.0.0
+        port: 8000
+
     system_packages:
       - libcairo2-dev
       - python-cairo
@@ -70,14 +74,14 @@
   roles:
     - role: "supervise"
       name: "carbon-cache"
-      command: python carbon-cache.py --nodaemon start
+      command: "{{ virtualenv_home }}/graphite/bin/python carbon-cache.py --nodaemon start"
       chdir: "/home/vagrant/graphite/bin"
       app_env:
         PATH: "{{ virtualenv_home }}/graphite/bin"
 
     - role: "supervise"
       name: graphite-web
-      command: gunicorn django webapp/graphite
-      app_home: "/home/vagrant/graphite"
+      command: "{{ virtualenv_home }}/graphite/bin/gunicorn_django --bind={{graphite.web.ip}}:{{graphite.web.port}}"
+      app_home: "/home/vagrant/graphite/webapp/graphite"
       app_env:
         PATH: "{{ virtualenv_home }}/graphite/bin"
