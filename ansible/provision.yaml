@@ -4,7 +4,9 @@
   vars:
     home: /home/vagrant
     virtualenv_home: "{{ home }}/.virtualenvs"
+    repos_dir: "{{ home }}/repos"
     graphite:
+      install_dir: "{{ home }}/graphite"
       packages:
         - graphite-web
         - carbon
@@ -20,52 +22,63 @@
       - python-rrdtool
       - memcached
 
+  # most, if not all, of this work should be extracted to a role
   pre_tasks:
     - name: system requirements
       apt: pkg={{ item }} state=latest
       sudo: yes
       with_items: system_packages
 
-    - name: install graphite packages
+    - file: state=directory path={{ home }}/{{ item }}
+      with_items: [ "{{ graphite.install_dir }}", "{{ repos_dir }}" ]
+
+    - name: download graphite packages
       git: repo=https://github.com/graphite-project/{{ item }}
            version={{ graphite.version }}
-           dest={{ home }}/{{ item }}
+           dest={{ repos_dir }}/{{ item }}
            depth=1
 
       with_items: graphite.packages
 
     - name: workaround for network blocking git://
-      command: sed -i -e "s/git+git/git+https/" {{ home }}/{{ item }}/requirements.txt
+      command: sed -i -e "s/git+git/git+https/" {{ repos_dir }}/{{ item }}/requirements.txt
       with_items: graphite.packages
 
     - name: install graphite deps
-      pip: requirements={{ home }}/{{ item }}/requirements.txt
+      pip: requirements={{ repos_dir }}/{{ item }}/requirements.txt
            virtualenv={{ virtualenv_home }}/graphite
       with_items: graphite.packages
 
+    - name: set install dir
+      lineinfile: dest={{ repos_dir }}/{{ item }}/setup.cfg
+                   state=present
+                   regexp=^prefix.*
+                   line=prefix={{ graphite.install_dir }}
+                   backup=yes
+      with_items: graphite.packages
+
     - name: setup graphite apps
-      command: chdir=/home/vagrant/{{ item }}
+      command: chdir={{repos_dir }}/{{ item }}
                python setup.py build install
-      sudo: yes
       with_items: graphite.packages
 
     - name: copy example confs to main conf
-      command: chdir={{ home }}/carbon/conf
-               creates={{ home }}/carbon/conf/{{ item }} 
+      command: chdir={{ graphite.install_dir }}/conf
+               creates={{ graphite.install_dir }}/conf/{{ item }} 
                cp {{ item }}.example {{ item }}
       with_items: graphite.carbon_conf_files
 
   roles:
     - role: "supervise"
-      name: carbon-cache
-      command: carbon-cache.py --nodaemon
-      chdir: "/home/vagrant/carbon/bin"
+      name: "carbon-cache"
+      command: python carbon-cache.py --nodaemon start
+      chdir: "/home/vagrant/graphite/bin"
       app_env:
-        PATH: "/home/vagrant/.virtualenv/graphite/bin"
+        PATH: "{{ virtualenv_home }}/graphite/bin"
 
     - role: "supervise"
       name: graphite-web
       command: gunicorn django webapp/graphite
-      app_home: "/home/vagrant/graphite-web"
+      app_home: "/home/vagrant/graphite"
       app_env:
-        PATH: "/home/vagrant/.virtualenv/graphite/bin"
+        PATH: "{{ virtualenv_home }}/graphite/bin"
