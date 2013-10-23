@@ -17,7 +17,6 @@
 
     system_packages:
       - libcairo2-dev
-      - gunicorn
       - python-cairo
       - python-rrdtool
       - memcached
