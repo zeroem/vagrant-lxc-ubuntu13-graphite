@@ -2,16 +2,16 @@
 ---
 - hosts: all
   vars:
-    home: /home/vagrant
-    virtualenv_home: "{{ home }}/.virtualenvs"
-    repos_dir: "{{ home }}/repos"
+    target_dir: /home/vagrant
+    virtualenv_home: "{{ target_dir }}/.virtualenvs"
+    graphite_repos_dir: "{{ target_dir }}/repos"
 
     graphite_virtualenv: "{{virtualenv_home}}/graphite"
     graphite_bin: "{{ graphite_virtualenv }}/bin"
     graphite_python: "{{ graphite_bin }}/python"
     graphite_gunicorn_django: "{{ graphite_virtualenv }}/bin/gunicorn_django"
 
-    graphite_install_dir: "{{ home }}/graphite"
+    graphite_install_dir: "{{ target_dir }}/graphite"
     graphite_packages:
       - graphite-web
       - carbon
@@ -37,26 +37,26 @@
       with_items: system_packages
 
     - file: state=directory path={{ home }}/{{ item }}
-      with_items: [ "{{ graphite_install_dir }}", "{{ repos_dir }}" ]
+      with_items: [ "{{ graphite_install_dir }}", "{{ graphite_repos_dir }}" ]
 
     - name: download graphite packages
       git: repo=https://github.com/graphite-project/{{ item }}
            version={{ graphite_version }}
-           dest={{ repos_dir }}/{{ item }}
+           dest={{ graphite_repos_dir }}/{{ item }}
            depth=1
       with_items: graphite_packages
 
     - name: workaround for network blocking git://
-      command: sed -i -e "s/git+git/git+https/" {{ repos_dir }}/{{ item }}/requirements.txt
+      command: sed -i -e "s/git+git/git+https/" {{ graphite_repos_dir }}/{{ item }}/requirements.txt
       with_items: graphite_packages
 
     - name: install graphite deps
-      pip: requirements={{ repos_dir }}/{{ item }}/requirements.txt
+      pip: requirements={{ graphite_repos_dir }}/{{ item }}/requirements.txt
            virtualenv={{ graphite_virtualenv }}
       with_items: graphite_packages
 
     - name: set install dir
-      lineinfile: dest={{ repos_dir }}/{{ item }}/setup.cfg
+      lineinfile: dest={{ graphite_repos_dir }}/{{ item }}/setup.cfg
                    state=present
                    regexp=^prefix.*
                    line=prefix={{ graphite_install_dir }}
@@ -65,7 +65,7 @@
       with_items: graphite_packages
 
     - name: setup graphite apps
-      command: chdir={{repos_dir }}/{{ item }}
+      command: chdir={{graphite_repos_dir }}/{{ item }}
                {{ graphite_python }} setup.py build install
       with_items: graphite_packages
 
