@@ -5,20 +5,23 @@
     home: /home/vagrant
     virtualenv_home: "{{ home }}/.virtualenvs"
     repos_dir: "{{ home }}/repos"
-    graphite:
-      install_dir: "{{ home }}/graphite"
-      packages:
-        - graphite-web
-        - carbon
-        - ceres
-      version: "master"
-      carbon_conf_files:
-        - carbon.conf
-        - storage-schemas.conf
 
-      web:
-        ip: 0.0.0.0
-        port: 8000
+    graphite_virtualenv: "{{virtualenv_home}}/graphite"
+    graphite_bin: "{{ graphite_virtualenv }}/bin"
+    graphite_python: "{{ graphite_bin }}/python"
+    graphite_gunicorn_django: "{{ graphite_virtualenv }}/bin/gunicorn_django"
+
+    graphite_install_dir: "{{ home }}/graphite"
+    graphite_packages:
+      - graphite-web
+      - carbon
+      - ceres
+    graphite_version: "master"
+    graphite_carbon_conf_files:
+      - carbon.conf
+      - storage-schemas.conf
+
+    graphite_web_bind: 0.0.0.0:8000
 
     system_packages:
       - libcairo2-dev
@@ -34,69 +37,69 @@
       with_items: system_packages
 
     - file: state=directory path={{ home }}/{{ item }}
-      with_items: [ "{{ graphite.install_dir }}", "{{ repos_dir }}" ]
+      with_items: [ "{{ graphite_install_dir }}", "{{ repos_dir }}" ]
 
     - name: download graphite packages
       git: repo=https://github.com/graphite-project/{{ item }}
-           version={{ graphite.version }}
+           version={{ graphite_version }}
            dest={{ repos_dir }}/{{ item }}
            depth=1
-      with_items: graphite.packages
+      with_items: graphite_packages
 
     - name: workaround for network blocking git://
       command: sed -i -e "s/git+git/git+https/" {{ repos_dir }}/{{ item }}/requirements.txt
-      with_items: graphite.packages
+      with_items: graphite_packages
 
     - name: install graphite deps
       pip: requirements={{ repos_dir }}/{{ item }}/requirements.txt
-           virtualenv={{ virtualenv_home }}/graphite
-      with_items: graphite.packages
+           virtualenv={{ graphite_virtualenv }}
+      with_items: graphite_packages
 
     - name: set install dir
       lineinfile: dest={{ repos_dir }}/{{ item }}/setup.cfg
                    state=present
                    regexp=^prefix.*
-                   line=prefix={{ graphite.install_dir }}
+                   line=prefix={{ graphite_install_dir }}
                    backup=yes
       when: item != "ceres"
-      with_items: graphite.packages
+      with_items: graphite_packages
 
     - name: setup graphite apps
       command: chdir={{repos_dir }}/{{ item }}
-               {{ virtualenv_home }}/graphite/bin/python setup.py build install
-      with_items: graphite.packages
+               {{ graphite_python }} setup.py build install
+      with_items: graphite_packages
 
     - name: copy example confs to main conf
-      command: chdir={{ graphite.install_dir }}/conf
-               creates={{ graphite.install_dir }}/conf/{{ item }} 
+      command: chdir={{ graphite_install_dir }}/conf
+               creates={{ graphite_install_dir }}/conf/{{ item }} 
                cp {{ item }}.example {{ item }}
-      with_items: graphite.carbon_conf_files
+      with_items: graphite_carbon_conf_files
 
     - name: change sqlite storage location
       lineinfile: >
-        dest={{ graphite.install_dir }}/webapp/graphite/settings.py
+        dest={{ graphite_install_dir }}/webapp/graphite/settings.py
         state=present
         regexp=\'NAME\':\\s+\'/opt
-        line="'NAME': '{{ graphite.install_dir }}/storage/graphite.db',"
+        line="'NAME': '{{ graphite_install_dir }}/storage/graphite_db',"
         backup=yes
 
     - name: setup sqlite
-      command: chdir={{ graphite.install_dir }}/webapp/graphite
-               {{ virtualenv_home }}/graphite/bin/python manage.py syncdb --noinput
+      command: chdir={{ graphite_install_dir }}/webapp/graphite
+               {{ graphite_python }} manage.py syncdb --noinput
       environment:
-        PYTHONPATH: "{{ graphite.install_dir }}/webapp"
+        PYTHONPATH: "{{ graphite_install_dir }}/webapp"
 
   roles:
     - role: "supervise"
       name: "carbon-cache"
-      command: "{{ virtualenv_home }}/graphite/bin/python carbon-cache.py --nodaemon start"
-      chdir: "/home/vagrant/graphite/bin"
+      command: "{{ graphite_python }} carbon-cache.py --nodaemon start"
+      chdir: "{{ graphite_install_dir }}/bin"
       app_env:
-        PATH: "{{ virtualenv_home }}/graphite/bin"
+        PATH: "{{ graphite_bin }}"
 
     - role: "supervise"
       name: graphite-web
-      command: "{{ virtualenv_home }}/graphite/bin/gunicorn_django --bind={{graphite.web.ip}}:{{graphite.web.port}}"
-      app_home: "/home/vagrant/graphite/webapp/graphite"
+      command: "{{ graphite_gunicorn_django }} --bind={{graphite_web_bind}}"
+      app_home: "{{graphite_install_dir}}/webapp/graphite"
       app_env:
-        PATH: "{{ virtualenv_home }}/graphite/bin"
+        PATH: "{{ graphite_bin }}"
