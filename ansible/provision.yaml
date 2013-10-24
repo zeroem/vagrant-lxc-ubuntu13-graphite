@@ -10,6 +10,7 @@
       packages:
         - graphite-web
         - carbon
+        - ceres
       version: "master"
       carbon_conf_files:
         - carbon.conf
@@ -57,6 +58,7 @@
                    regexp=^prefix.*
                    line=prefix={{ graphite.install_dir }}
                    backup=yes
+      when: item != "ceres"
       with_items: graphite.packages
 
     - name: setup graphite apps
