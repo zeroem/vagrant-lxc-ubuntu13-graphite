@@ -40,7 +40,6 @@
            version={{ graphite.version }}
            dest={{ repos_dir }}/{{ item }}
            depth=1
-
       with_items: graphite.packages
 
     - name: workaround for network blocking git://
@@ -62,7 +61,7 @@
 
     - name: setup graphite apps
       command: chdir={{repos_dir }}/{{ item }}
-               python setup.py build install
+               {{ virtualenv_home }}/graphite/bin/python setup.py build install
       with_items: graphite.packages
 
     - name: copy example confs to main conf
@@ -70,6 +69,20 @@
                creates={{ graphite.install_dir }}/conf/{{ item }} 
                cp {{ item }}.example {{ item }}
       with_items: graphite.carbon_conf_files
+
+    - name: change sqlite storage location
+      lineinfile: >
+        dest={{ graphite.install_dir }}/webapp/graphite/settings.py
+        state=present
+        regexp=\'NAME\':\\s+\'/opt
+        line="'NAME': '{{ graphite.install_dir }}/storage/graphite.db',"
+        backup=yes
+
+    - name: setup sqlite
+      command: chdir={{ graphite.install_dir }}/webapp/graphite
+               {{ virtualenv_home }}/graphite/bin/python manage.py syncdb --noinput
+      environment:
+        PYTHONPATH: "{{ graphite.install_dir }}/webapp"
 
   roles:
     - role: "supervise"
